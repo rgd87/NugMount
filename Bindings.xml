@@ -1,0 +1,6 @@
+<Bindings>
+	<Binding name="CLICK NugMount:LeftButton" header="NUGMOUNT">
+    </Binding>
+    <Binding name="CLICK NugMount:RightButton" header="NUGMOUNT">
+    </Binding>
+</Bindings>

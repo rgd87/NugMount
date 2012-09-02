@@ -1,0 +1,6 @@
+## Interface: 40100
+## Title: NugMount
+## Notes: Mount button
+## Author: d87
+## SavedVariablesPerCharacter: NugMountDB
+NugMount.lua
