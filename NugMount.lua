@@ -56,7 +56,7 @@ function NugMount.ADDON_LOADED(self,event,arg1)
                         mtype = db.G
                     end
                 end
-                if next(mtype) > 0 then
+                if next(mtype) then
                     local spellID = NugMount:GetRandomMount(mtype)
                     NugMount:CallCompanionBySpellID(spellID)
                 end
