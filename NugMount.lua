@@ -7,6 +7,7 @@ end)
 BINDING_HEADER_NUGMOUNT = "NugMount"
 _G["BINDING_NAME_CLICK NugMount:LeftButton"] = "MountUp"
 _G["BINDING_NAME_CLICK NugMount:RightButton"] = "Force Ground Mount"
+_G["BINDING_NAME_CLICK NugMount:MiddleButton"] = "Dismount"
 
 NugMount:RegisterEvent("ADDON_LOADED")
 
@@ -30,6 +31,7 @@ function NugMount.ADDON_LOADED(self,event,arg1)
         NugMountDB.G = NugMountDB.G or {}
         NugMountDB.F = NugMountDB.F or {}
         NugMountDB.S = NugMountDB.S or {}
+        if NugMountDB.dismount == nil then NugMountDB.dismount = true end
 
         local StDrv = CreateFrame("Frame",nil,nil,"SecureHandlerStateTemplate")
         StDrv:SetAttribute("_onstate-flyable",[[
@@ -41,7 +43,7 @@ function NugMount.ADDON_LOADED(self,event,arg1)
         RegisterStateDriver(StDrv, "flyable", "[flyable] true; false");
 
         NugMount:SetScript("OnClick",function(self,btn)
-                if IsMounted() then return Dismount() end
+                if IsMounted() and (NugMountDB.dismount or btn == "MiddleButton") then return Dismount() end
                 -- if not initalized then self:Initialize() end
                 local db = NugMountDB
                 local mtype
@@ -96,6 +98,8 @@ function NugMount.ADDON_LOADED(self,event,arg1)
         label:SetJustifyH("CENTER")
         label:SetText("Alt-Click\nFlying\n\nCtrl-Click\nGround\n\nAlt+Ctrl\nSea")
         NugMount.helpLabel = label
+
+        NugMount:CreateCheckBox()
     end
 end
 
@@ -178,13 +182,31 @@ function NugMount.CreateLabels(self, btn)
         btn.sLabel = s
 end
 
-
-
-
-
-
-
-
+function NugMount.CreateCheckBox(self)
+    local f = CreateFrame("CheckButton",nil,MountJournal,"UICheckButtonTemplate")
+    f:SetWidth(25)
+    f:SetHeight(25)
+    f:SetPoint("BOTTOMLEFT",MountJournal,"BOTTOMLEFT",170,2)
+    f:SetChecked(NugMountDB.dismount)
+    f:SetScript("OnClick",function(self,button)
+        NugMountDB.dismount = not NugMountDB.dismount
+    end)
+    f:SetScript("OnEnter",function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_BOTTOMRIGHT")
+        GameTooltip:SetText("If disabled NugMount won't dismount you on the same key.", nil, nil, nil, nil, 1);
+        GameTooltip:Show();
+    end)
+    f:SetScript("OnLeave",function(self)
+        GameTooltip:Hide();
+    end)
+    
+    local label  =  f:CreateFontString(nil, "OVERLAY")
+    label:SetFontObject("GameFontNormal")
+    label:SetPoint("LEFT",f,"RIGHT",0,0)
+    label:SetText("Dismount")
+    
+    return f
+end
 
 
 

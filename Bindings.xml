@@ -3,4 +3,6 @@
     </Binding>
     <Binding name="CLICK NugMount:RightButton" header="NUGMOUNT">
     </Binding>
+    <Binding name="CLICK NugMount:MiddleButton" header="NUGMOUNT">
+    </Binding>
 </Bindings>
