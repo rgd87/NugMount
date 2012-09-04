@@ -11,7 +11,7 @@ _G["BINDING_NAME_CLICK NugMount:MiddleButton"] = "Dismount"
 
 NugMount:RegisterEvent("ADDON_LOADED")
 
-local DB_VERSION = 2
+local DB_VERSION = 3
 
 local UnderwaterZones = {
     [610] = true, -- Kelp'thar Forest
@@ -19,18 +19,23 @@ local UnderwaterZones = {
     [615] = true, -- Shimmering Expanse
 }
 
-
 function NugMount.ADDON_LOADED(self,event,arg1)
     if arg1 == "NugMount" then
     
         NugMountDB = NugMountDB or {}
         if not NugMountDB.DB_VERSION or NugMountDB.DB_VERSION ~= DB_VERSION then
-            table.wipe(NugMountDB)
+            if NugMountDB.DB_VERSION == 2 then -- migration from NugMount 5.0 to 5.1
+                local flying = NugMountDB.F
+                NugMountDB = { mounts = flying }
+            else
+                table.wipe(NugMountDB)
+            end
             NugMountDB.DB_VERSION = DB_VERSION
         end
-        NugMountDB.G = NugMountDB.G or {}
-        NugMountDB.F = NugMountDB.F or {}
-        NugMountDB.S = NugMountDB.S or {}
+        NugMountDB.mounts = NugMountDB.mounts or {}
+        -- NugMountDB.G = NugMountDB.G or {}
+        -- NugMountDB.F = NugMountDB.F or {}
+        -- NugMountDB.S = NugMountDB.S or {}
         if NugMountDB.dismount == nil then NugMountDB.dismount = true end
 
         local StDrv = CreateFrame("Frame",nil,nil,"SecureHandlerStateTemplate")
@@ -48,19 +53,20 @@ function NugMount.ADDON_LOADED(self,event,arg1)
                 local db = NugMountDB
                 local mtype
                 if btn == "RightButton" then
-                    mtype = db.G
+                    mtype = "ground"
                 else
-                    if  next(db.S) and UnderwaterZones[GetCurrentMapAreaID()] then
-                        mtype = db.S
-                    elseif StDrv:GetAttribute("canFly") and next(db.F) then
-                        mtype = db.F
+                    if  UnderwaterZones[GetCurrentMapAreaID()] then
+                        mtype = "sea"
+                    elseif StDrv:GetAttribute("canFly") then
+                        mtype = "flying"
                     else
-                        mtype = db.G
+                        mtype = "ground"
                     end
                 end
-                if next(mtype) then
-                    local spellID = NugMount:GetRandomMount(mtype)
-                    NugMount:CallCompanionBySpellID(spellID)
+                if mtype then
+                    local index = NugMount:GetRandomMount(mtype)
+                    if index then CallCompanion("MOUNT", index) end
+                    -- NugMount:CallCompanionBySpellID(spellID)
                 end
         end)
         
@@ -69,17 +75,9 @@ function NugMount.ADDON_LOADED(self,event,arg1)
         for i, btn in ipairs(MountJournal.ListScrollFrame.buttons) do
             btn:SetScript("OnClick",function(self, button)
                 local spellID = self.spellID
-                if IsAltKeyDown() and IsControlKeyDown() then
-                    if NugMountDB.S[spellID] then NugMountDB.S[spellID] = nil
-                    else NugMountDB.S[spellID] = true end
-                    NugMount:CheckListButton(self, spellID)
-                elseif IsControlKeyDown() then
-                    if NugMountDB.G[spellID] then NugMountDB.G[spellID] = nil
-                    else NugMountDB.G[spellID] = true end
-                    NugMount:CheckListButton(self, spellID)
-                elseif IsAltKeyDown() then
-                    if NugMountDB.F[spellID] then NugMountDB.F[spellID] = nil
-                    else NugMountDB.F[spellID] = true end
+                if IsControlKeyDown() then
+                    if NugMountDB.mounts[spellID] then NugMountDB.mounts[spellID] = nil
+                    else NugMountDB.mounts[spellID] = true end
                     NugMount:CheckListButton(self, spellID)
                 else
                     return MountListItem_OnClick(self,button)
@@ -96,7 +94,7 @@ function NugMount.ADDON_LOADED(self,event,arg1)
         label:SetFontObject("GameFontNormal")
         label:SetPoint("TOPLEFT", MountJournal.MountDisplay.ShadowOverlay, "TOPLEFT",10, -10)
         label:SetJustifyH("CENTER")
-        label:SetText("Alt-Click\nFlying\n\nCtrl-Click\nGround\n\nAlt+Ctrl\nSea")
+        label:SetText("Ctrl-Click\nSelect favorite")
         NugMount.helpLabel = label
 
         NugMount:CreateCheckBox()
@@ -131,55 +129,104 @@ function NugMount.UpdateMountList()
         end
 end
 
-function NugMount:CallCompanionBySpellID(spellID)
-    local index = 1
-    while true do
-        local name,_,companionSpellID = GetCompanionInfo("MOUNT", index)
-        if not name then return end
-        if spellID == companionSpellID then return CallCompanion("MOUNT", index) end
-        index = index + 1
+-- function NugMount:CallCompanionBySpellID(spellID)
+--     local index = 1
+--     while true do
+--         local name,_,companionSpellID = GetCompanionInfo("MOUNT", index)
+--         if not name then return end
+--         if spellID == companionSpellID then return CallCompanion("MOUNT", index) end
+--         index = index + 1
+--     end
+-- end
+
+
+do
+    local bit_band = bit.band
+    local MNT_GROUND = 0x01 -- Ground mount
+    local MNT_FLYING = 0x02 -- Flying mount
+    local MNT_ONWATER = 0x04 -- Usable at the water's surface
+    local MNT_UNDERWATER = 0x08 -- Usable underwater
+    local MNT_CANJUMP = 0x10 -- Can jump (the turtle mount cannot, for example)
+    local function isMountType(mountFlags, mtype)
+        if mtype == "sea" then
+            return  (bit_band(mountFlags, MNT_GROUND) == 0) and
+                    (bit_band(mountFlags, MNT_FLYING) == 0) and
+                    (bit_band(mountFlags, MNT_UNDERWATER) == MNT_UNDERWATER)
+        elseif mtype == "flying" then
+            return  (bit_band(mountFlags, MNT_FLYING) == MNT_FLYING)
+        elseif mtype == "ground" then
+            return  (bit_band(mountFlags, MNT_GROUND) == MNT_GROUND) and
+                    ((bit_band(mountFlags, MNT_CANJUMP) == MNT_CANJUMP)
+                       or
+                     (bit_band(mountFlags, MNT_FLYING) == 0))
+        end
     end
+    function NugMount:GetRandomMount(mtype, nofavs)
+        local t = {}
+        local favs = nofavs and {} or NugMountDB.mounts
+        local index = 1
+        while true do
+            local creatureID, creatureName, spellID, icon, active, mountFlags = GetCompanionInfo("MOUNT", index)
+            if not creatureID then break end
+            if  isMountType(mountFlags, mtype) and
+                ( not next(favs) or favs[spellID] )
+            then
+                table.insert(t, index)
+            end
+            index = index + 1
+        end
+        if not next(t) and nofavs == nil then
+            return self:GetRandomMount(mtype, true)
+        end
+        if not next(t) and mtype ~= "ground" then
+            return self:GetRandomMount("ground")
+        end
+        if not next(t) then return nil end
+
+        local random = t[math.random(#t)]
+        -- print(random,">>>", GetCompanionInfo("MOUNT", random))
+        table.wipe(t)
+        return random
+    end
+
 end
 
-function NugMount:GetRandomMount(set)
-    local t = {}
-    for k,v in pairs(set) do
-        table.insert(t,k)
-    end
-    local random = t[math.random(#t)]
-    table.wipe(t)
-    return random
-end
 
 function NugMount:CheckListButton(btn, spellID)
     local db = NugMountDB
-    if db.S[spellID] then btn.sLabel:Show() else btn.sLabel:Hide() end
-    if db.G[spellID] then btn.gLabel:Show() else btn.gLabel:Hide() end
-    if db.F[spellID] then btn.fLabel:Show() else btn.fLabel:Hide() end
+    if db.mounts[spellID] then btn.favIcon:Show() else btn.favIcon:Hide() end
 end
+
 function NugMount.CreateLabels(self, btn)
-        local size = 20
-        local f = btn:CreateTexture(nil, "ARTWORK", nil, 5)
-        f:SetWidth(size); f:SetHeight(size);
-        f:SetTexCoord(0.79687500, 0.49218750, 0.50390625, 0.65625000)
-        f:SetTexture(GetPetTypeTexture(3)) --flying
-        f:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -28, -3)
+        -- local size = 20
+        -- local f = btn:CreateTexture(nil, "ARTWORK", nil, 1)
+        -- f:SetWidth(size); f:SetHeight(size);
+        -- f:SetTexCoord(0.79687500, 0.49218750, 0.50390625, 0.65625000)
+        -- f:SetTexture(GetPetTypeTexture(3)) --flying
+        -- f:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -28, -3)
 
-        local g = btn:CreateTexture(nil, "ARTWORK", nil, 5)
-        g:SetWidth(size); g:SetHeight(size);
-        g:SetTexCoord(0.79687500, 0.49218750, 0.50390625, 0.65625000)
-        g:SetTexture(GetPetTypeTexture(8)) --beast
-        g:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -3, -3)
+        -- local g = btn:CreateTexture(nil, "ARTWORK", nil, 1)
+        -- g:SetWidth(size); g:SetHeight(size);
+        -- g:SetTexCoord(0.79687500, 0.49218750, 0.50390625, 0.65625000)
+        -- g:SetTexture(GetPetTypeTexture(8)) --beast
+        -- g:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -3, -3)
 
-        local s = btn:CreateTexture(nil, "ARTWORK", nil, 5)
-        s:SetWidth(size); s:SetHeight(size);
-        s:SetTexCoord(0.79687500, 0.49218750, 0.50390625, 0.65625000)
-        s:SetTexture(GetPetTypeTexture(9)) --water
-        s:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -53, -3)
+        -- local s = btn:CreateTexture(nil, "ARTWORK", nil, 1)
+        -- s:SetWidth(size); s:SetHeight(size);
+        -- s:SetTexCoord(0.79687500, 0.49218750, 0.50390625, 0.65625000)
+        -- s:SetTexture(GetPetTypeTexture(9)) --water
+        -- s:SetPoint("TOPRIGHT", btn, "TOPRIGHT", -53, -3)
 
-        btn.fLabel = f
-        btn.gLabel = g
-        btn.sLabel = s
+        local fav = btn.DragButton:CreateTexture(nil, "OVERLAY", nil, 1)
+        fav:SetWidth(25); fav:SetHeight(25);
+        fav:SetTexCoord(0.11328125, 0.16210938, 0.02246094, 0.04687500)
+        fav:SetTexture([[Interface\PetBattles\PetJournal]])
+        fav:SetPoint("TOPLEFT", btn.icon, "TOPLEFT", -8, 8)
+
+        btn.favIcon = fav
+        -- btn.fLabel = f
+        -- btn.gLabel = g
+        -- btn.sLabel = s
 end
 
 function NugMount.CreateCheckBox(self)
