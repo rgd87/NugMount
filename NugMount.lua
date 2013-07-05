@@ -25,8 +25,8 @@ function NugMount.ADDON_LOADED(self,event,arg1)
         NugMountDB = NugMountDB or {}
         if not NugMountDB.DB_VERSION or NugMountDB.DB_VERSION ~= DB_VERSION then
             if NugMountDB.DB_VERSION == 2 then -- migration from NugMount 5.0 to 5.1
-                local flying = NugMountDB.F
-                NugMountDB = { mounts = flying }
+                local flying, dmnt = NugMountDB.F, NugMountDB.dismount
+                NugMountDB = { mounts = flying, dismount = dmnt }
             else
                 table.wipe(NugMountDB)
             end
@@ -222,6 +222,7 @@ function NugMount.CreateLabels(self, btn)
         fav:SetTexCoord(0.11328125, 0.16210938, 0.02246094, 0.04687500)
         fav:SetTexture([[Interface\PetBattles\PetJournal]])
         fav:SetPoint("TOPLEFT", btn.icon, "TOPLEFT", -8, 8)
+        fav:Hide()
 
         btn.favIcon = fav
         -- btn.fLabel = f
